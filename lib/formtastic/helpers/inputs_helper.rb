@@ -665,8 +665,14 @@ module Formtastic
       # default is a :string, a similar behaviour to Rails' scaffolding.
       def default_input_type(method, options = {}) #:nodoc:
         if column = column_for(method)
+          # Mongoid returns a class for field type, so we need to convert it to underscored symbol
+          column_type = column.type.to_s.underscore.to_sym
+
+          # Mongoid stores objects as strings
+          column_type = :string if column_type == :object
+
           # Special cases where the column type doesn't map to an input method.
-          case column.type
+          case column_type
           when :string
             return :password  if method.to_s =~ /password/
             return :country   if method.to_s =~ /country$/
@@ -685,9 +691,9 @@ module Formtastic
           end
 
           # Try look for hints in options hash. Quite common senario: Enum keys stored as string in the database.
-          return :select    if column.type == :string && options.key?(:collection)
+          return :select    if column_type == :string && options.key?(:collection)
           # Try 3: Assume the input name will be the same as the column type (e.g. string_input).
-          return column.type
+          return column_type
         else
           if @object
             return :select  if reflection_for(method)
@@ -703,7 +709,16 @@ module Formtastic
 
       # Get a column object for a specified attribute method - if possible.
       def column_for(method) #:nodoc:
-        @object.column_for_attribute(method) if @object.respond_to?(:column_for_attribute)
+        if @object.respond_to?(:column_for_attribute)
+          @object.column_for_attribute(method)
+        else
+          field_for(method)
+        end
+      end
+
+      # Get a field object for a specified attribute method - if possible.
+      def field_for(method) #:nodoc:
+        @object.fields[method.to_s] if @object.respond_to?(:fields) && @object.fields.is_a?(Hash)
       end
 
       def field_set_title_from_args(*args) #:nodoc:
